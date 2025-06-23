@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Chọn file Excel</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: #f3f4f6;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+
+            .container {
+                background: white;
+                padding: 30px 40px;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                text-align: center;
+                max-width: 400px;
+                width: 100%;
+            }
+
+            h2 {
+                margin-bottom: 20px;
+                color: #333;
+            }
+
+            input[type="file"] {
+                margin-bottom: 20px;
+                padding: 8px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+            }
+
+            button {
+                padding: 10px 20px;
+                background-color: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 16px;
+                transition: background-color 0.3s ease;
+            }
+
+            button:hover {
+                background-color: #2563eb;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Chọn file Excel</h2>
+            <form id="excelForm">
+                <input
+                    type="file"
+                    id="excelFile"
+                    accept=".xls,.xlsx"
+                    required
+                />
+                <br />
+                <button type="submit">Tiếp tục</button>
+            </form>
+        </div>
+
+        <script>
+            document
+                .getElementById("excelForm")
+                .addEventListener("submit", function (e) {
+                    e.preventDefault();
+
+                    const fileInput = document.getElementById("excelFile");
+                    const file = fileInput.files[0];
+
+                    if (!file) {
+                        alert("Vui lòng chọn file Excel!");
+                        return;
+                    }
+
+                    const allowedTypes = [
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.ms-excel",
+                    ];
+
+                    if (!allowedTypes.includes(file.type)) {
+                        alert("Chỉ chấp nhận file Excel (.xls, .xlsx)!");
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = function (event) {
+                        const base64Data = btoa(
+                            new Uint8Array(event.target.result).reduce(
+                                (data, byte) =>
+                                    data + String.fromCharCode(byte),
+                                ""
+                            )
+                        );
+                        localStorage.setItem("excelFileData", base64Data);
+                        localStorage.setItem("excelFileName", file.name);
+                        window.location.href = "heading.html";
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+        </script>
+    </body>
+</html>

@@ -1,0 +1,15 @@
+flask
+flask-cors
+langchain
+llama-cpp-python
+faiss-cpu
+sentence-transformers
+python-docx
+pdfplumber
+PyMuPDF
+unstructured
+google-genai
+dotenv
+python-dotenv
+langchain_community
+langchain_google_genai

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Preview</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+            }
+            h2 {
+                margin-bottom: 20px;
+            }
+            table {
+                margin-top: 20px;
+                border-collapse: collapse;
+                width: 80%;
+            }
+            th,
+            td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            .indexed {
+                font-weight: bold;
+            }
+            button {
+                margin-top: 20px;
+                padding: 10px 20px;
+                margin-right: 10px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                cursor: pointer;
+            }
+            #backBtn {
+                background-color: #2196f3;
+            }
+            button:disabled {
+                background-color: #ccc;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Configuration Preview</h2>
+        <div id="preview-section">
+            <p><strong>Selected Sheet:</strong> <span id="sheetName"></span></p>
+            <p><strong>Header Row:</strong> <span id="headerRow"></span></p>
+            <p>
+                <strong>Data Starting Row:</strong> <span id="dataRow"></span>
+            </p>
+
+            <table id="previewTable">
+                <thead>
+                    <tr>
+                        <th>Index</th>
+                        <th>Column Name</th>
+                        <th>Data Type</th>
+                        <th>Indexed</th>
+                    </tr>
+                </thead>
+                <tbody id="previewBody">
+                    <!-- Dynamically inserted rows -->
+                </tbody>
+            </table>
+
+            <button id="backBtn">Back</button>
+            <button id="confirmBtn">Confirm</button>
+        </div>
+
+        <script>
+            const config = JSON.parse(localStorage.getItem("tableConfig"));
+
+            if (!config) {
+                alert(
+                    "No configuration found! Please configure the table first."
+                );
+                window.location.href = "heading.html";
+            } else {
+                displayPreview();
+            }
+
+            function displayPreview() {
+                document.getElementById("sheetName").textContent =
+                    config.sheetName;
+                document.getElementById(
+                    "headerRow"
+                ).textContent = `Line ${config.headerRow}`;
+                document.getElementById(
+                    "dataRow"
+                ).textContent = `Line ${config.dataRow}`;
+
+                const tbody = document.getElementById("previewBody");
+                tbody.innerHTML = "";
+                config.columns.forEach((col) => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td class="${col.isIndexed ? "indexed" : ""}">${
+                        col.index
+                    }</td>
+                        <td class="${col.isIndexed ? "indexed" : ""}">${
+                        col.name || ""
+                    }</td>
+                        <td class="${col.isIndexed ? "indexed" : ""}">${
+                        col.dataType
+                    }</td>
+                        <td>${col.isIndexed ? "Yes" : "No"}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById("backBtn").addEventListener("click", () => {
+                window.location.href = "heading.html";
+            });
+
+            document
+                .getElementById("confirmBtn")
+                .addEventListener("click", async () => {
+                    const config = JSON.parse(
+                        localStorage.getItem("tableConfig")
+                    );
+                    const fileData = localStorage.getItem("excelFileData");
+                    const fileName = localStorage.getItem("excelFileName");
+
+                    if (!fileData || !config || !fileName) {
+                        alert("Missing file data or configuration.");
+                        return;
+                    }
+
+                    const byteCharacters = atob(fileData);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], {
+                        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    });
+
+                    const formData = new FormData();
+                    formData.append("file", blob, fileName);
+                    formData.append("config", JSON.stringify(config));
+
+                    const response = await fetch(
+                        "http://127.0.0.1:5000/api/upload_and_embed",
+                        {
+                            method: "POST",
+                            body: formData,
+                        }
+                    );
+
+                    const result = await response.json();
+                    if (response.ok) {
+                        alert("Embedding done!");
+                        window.location.href = "index.html";
+                    } else {
+                        alert("Error: " + result.error);
+                    }
+                });
+        </script>
+    </body>
+</html>

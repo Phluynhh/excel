@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Table Configuration</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+            }
+            h2 {
+                margin-bottom: 20px;
+            }
+            label {
+                display: block;
+                margin-top: 10px;
+                font-weight: bold;
+            }
+            select,
+            input[type="number"],
+            input[type="text"] {
+                width: 200px;
+                padding: 5px;
+                margin-top: 5px;
+            }
+            table {
+                margin-top: 20px;
+                border-collapse: collapse;
+                width: 80%;
+            }
+            th,
+            td {
+                border: 1px solid #ddd;
+                padding: 8px;
+            }
+            button {
+                margin-top: 20px;
+                padding: 10px 20px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                cursor: pointer;
+            }
+            button:disabled {
+                background-color: #ccc;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Table Configuration</h2>
+        <div id="config-section">
+            <label for="sheetSelect">Data Sheet:</label>
+            <select id="sheetSelect"></select>
+
+            <label for="headerRow">Header:</label>
+            <select id="headerRow"></select>
+
+            <label for="dataRow">Data starting row:</label>
+            <select id="dataRow"></select>
+
+            <table id="columnTable">
+                <thead>
+                    <tr>
+                        <th>Index</th>
+                        <th>Column Name</th>
+                        <th>Data Type</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="columnBody">
+                    <!-- Dynamically inserted rows -->
+                </tbody>
+            </table>
+
+            <button id="nextBtn">Next</button>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        <script>
+            // Load Excel file data from localStorage
+            const fileData = localStorage.getItem("excelFileData");
+            let workbook;
+
+            if (!fileData) {
+                alert("Vui lòng chọn file Excel trước!");
+                window.location.href = "file.html";
+            } else {
+                const data = new Uint8Array(
+                    atob(fileData)
+                        .split("")
+                        .map((c) => c.charCodeAt(0))
+                );
+                workbook = XLSX.read(data, { type: "array" });
+                populateSheetSelect();
+            }
+
+            function populateSheetSelect() {
+                const sheetSelect = document.getElementById("sheetSelect");
+                workbook.SheetNames.forEach((name) => {
+                    const option = document.createElement("option");
+                    option.value = name;
+                    option.text = name;
+                    sheetSelect.appendChild(option);
+                });
+                sheetSelect.addEventListener("change", () => {
+                    populateRowSelects();
+                    updateTablePreview();
+                });
+                populateRowSelects();
+                updateTablePreview();
+            }
+
+            function populateRowSelects() {
+                const sheetName = document.getElementById("sheetSelect").value;
+                const sheet = workbook.Sheets[sheetName];
+                const range = XLSX.utils.decode_range(sheet["!ref"]);
+                const rowCount = range.e.r + 1;
+
+                const headerRowSelect = document.getElementById("headerRow");
+                const currentHeaderRow = headerRowSelect.value || "1";
+                headerRowSelect.innerHTML = "";
+                for (let i = 1; i < rowCount; i++) {
+                    const option = document.createElement("option");
+                    option.value = i;
+                    option.text = `Line ${i}`;
+                    headerRowSelect.appendChild(option);
+                }
+                headerRowSelect.value =
+                    currentHeaderRow <= rowCount - 1 ? currentHeaderRow : "1";
+
+                updateDataRowSelect();
+
+                headerRowSelect.addEventListener("change", () => {
+                    updateDataRowSelect();
+                    updateTablePreview();
+                });
+
+                document
+                    .getElementById("dataRow")
+                    .addEventListener("change", updateTablePreview);
+            }
+
+            function updateDataRowSelect() {
+                const headerRow = parseInt(
+                    document.getElementById("headerRow").value
+                );
+                const sheetName = document.getElementById("sheetSelect").value;
+                const sheet = workbook.Sheets[sheetName];
+                const range = XLSX.utils.decode_range(sheet["!ref"]);
+                const rowCount = range.e.r + 1;
+
+                const dataRowSelect = document.getElementById("dataRow");
+                const currentDataRow = dataRowSelect.value || headerRow + 1;
+                dataRowSelect.innerHTML = "";
+                for (let i = Math.max(2, headerRow + 1); i <= rowCount; i++) {
+                    const option = document.createElement("option");
+                    option.value = i;
+                    option.text = `Line ${i}`;
+                    dataRowSelect.appendChild(option);
+                }
+                dataRowSelect.value =
+                    currentDataRow >= headerRow + 1 &&
+                    currentDataRow <= rowCount
+                        ? currentDataRow
+                        : Math.max(2, headerRow + 1);
+            }
+
+            function updateTablePreview() {
+                const sheetName = document.getElementById("sheetSelect").value;
+                const sheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                const headerRow =
+                    parseInt(document.getElementById("headerRow").value) - 1;
+                const headers = json[headerRow] || [];
+
+                const tbody = document.getElementById("columnBody");
+                tbody.innerHTML = "";
+                headers.forEach((header, index) => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td><input type="checkbox" checked /> ${index + 1}</td>
+                        <td><input type="text" value="${header || ""}" /></td>
+                        <td>
+                            <select>
+                                <option value="String">String</option>
+                                <option value="Number">Number</option>
+                                <option value="Date">Date</option>
+                            </select>
+                        </td>
+                        <td><button onclick="removeRow(this)">Delete</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function removeRow(btn) {
+                const row = btn.closest("tr");
+                row.remove();
+            }
+
+            document.getElementById("nextBtn").addEventListener("click", () => {
+                const sheetName = document.getElementById("sheetSelect").value;
+                const headerRow = document.getElementById("headerRow").value;
+                const dataRow = document.getElementById("dataRow").value;
+                const rows = document.querySelectorAll("#columnBody tr");
+                const columns = [];
+
+                let hasIndexedColumn = false;
+                rows.forEach((row, index) => {
+                    const checkbox = row.querySelector(
+                        "input[type='checkbox']"
+                    );
+                    const nameInput = row.querySelector("input[type='text']");
+                    const dataTypeSelect = row.querySelector("select");
+                    if (checkbox && nameInput && dataTypeSelect) {
+                        columns.push({
+                            index: index + 1,
+                            name: nameInput.value,
+                            dataType: dataTypeSelect.value,
+                            isIndexed: checkbox.checked,
+                        });
+                        if (checkbox.checked) hasIndexedColumn = true;
+                    }
+                });
+
+                if (!hasIndexedColumn) {
+                    alert("Vui lòng chọn ít nhất một cột để indexing!");
+                    return;
+                }
+
+                const config = {
+                    sheetName,
+                    headerRow,
+                    dataRow,
+                    columns,
+                };
+
+                localStorage.setItem("tableConfig", JSON.stringify(config));
+                window.location.href = "preview.html";
+            });
+        </script>
+    </body>
+</html>
