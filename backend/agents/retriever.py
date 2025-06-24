@@ -34,59 +34,47 @@ class Retriever:
         self.files = [meta.get("file", "unknown") for meta in self.metadatas]
         self.configs = [meta.get("config", {}) for meta in self.metadatas]
 
-        # Lấy embedding từ MongoDB nếu có, nếu không thì None
+        # Chỉ lấy embedding đã lưu, bỏ qua doc chưa có embedding
         self.embeddings = []
-        for doc in self.docs:
+        self.valid_indices = []
+        for idx, doc in enumerate(self.docs):
             emb = doc.get("embedding")
-            if emb is not None:
+            if emb is not None and self.files[idx].endswith(".xlsx"):
                 self.embeddings.append(np.array(emb, dtype=np.float32))
-            else:
-                self.embeddings.append(None)
+                self.valid_indices.append(idx)
+        # Lưu lại texts, metadatas, files tương ứng
+        self.texts = [self.texts[i] for i in self.valid_indices]
+        self.metadatas = [self.metadatas[i] for i in self.valid_indices]
+        self.files = [self.files[i] for i in self.valid_indices]
 
     def preprocess_query(self, query):
         """Preprocess query for Vietnamese using pyvi."""
         tokens = ViTokenizer.tokenize(query.lower()).split()
         return [token for token in tokens if token not in vietnamese_stopwords]
 
-    def get_context(self, query, top_k=20, max_total_chars=50000, metadata_filter=None):
+    def get_context(self, query, top_k=50, max_total_chars=100000, file_name=None):
         """
-        Retrieve context using only semantic search.
-        Sử dụng embedding đã lưu trong MongoDB nếu có, nếu không thì tính động.
-        metadata_filter: dict, e.g. {"file": "abc.xlsx"}
+        Retrieve context using only semantic search for Excel files.
+        file_name: chỉ lấy context từ file Excel cụ thể (nếu có).
         """
-        # Apply metadata filter
-        filtered_indices = list(range(len(self.docs)))
-        if metadata_filter:
+        # Lọc theo file Excel nếu có
+        filtered_indices = list(range(len(self.texts)))
+        if file_name:
             filtered_indices = [
                 i for i, meta in enumerate(self.metadatas)
-                if all(meta.get(k) == v for k, v in metadata_filter.items())
+                if meta.get("file", "").lower() == file_name.lower()
             ]
             if not filtered_indices:
-                print("No documents match the metadata filter.")
+                print("No documents match the file filter.")
                 return ""
 
-        # Get query embedding (phải dùng đúng model)
+        # Lấy embedding cho query
         query_embedding = embedding_model.embed_query(query)
 
-        # Chuẩn bị embedding cho các document (ưu tiên lấy từ MongoDB)
-        filtered_embeddings = []
-        filtered_texts = []
-        filtered_metas = []
-        filtered_idxs = []
-        for i in filtered_indices:
-            emb = self.embeddings[i]
-            if emb is not None:
-                filtered_embeddings.append(emb)
-                filtered_texts.append(self.texts[i])
-                filtered_metas.append(self.metadatas[i])
-                filtered_idxs.append(i)
-            else:
-                # Nếu không có embedding, tính động
-                emb_dyn = embedding_model.embed_documents([self.texts[i]])[0]
-                filtered_embeddings.append(np.array(emb_dyn, dtype=np.float32))
-                filtered_texts.append(self.texts[i])
-                filtered_metas.append(self.metadatas[i])
-                filtered_idxs.append(i)
+        # Lấy embedding và texts đã lọc
+        filtered_embeddings = [self.embeddings[i] for i in filtered_indices]
+        filtered_texts = [self.texts[i] for i in filtered_indices]
+        filtered_metas = [self.metadatas[i] for i in filtered_indices]
 
         if not filtered_embeddings:
             print("No embeddings found for filtered documents.")
@@ -95,9 +83,9 @@ class Retriever:
         # Tính cosine similarity
         similarities = cosine_similarity([query_embedding], filtered_embeddings)[0]
 
-        # Sort by similarity
+        # Sắp xếp theo similarity giảm dần
         scored_indices = sorted(
-            zip(filtered_idxs, similarities, filtered_texts, filtered_metas),
+            zip(filtered_indices, similarities, filtered_texts, filtered_metas),
             key=lambda x: x[1],
             reverse=True
         )
@@ -106,18 +94,17 @@ class Retriever:
         total_chars = 0
         selected_chunks = []
 
+        # Lấy nhiều chunk hơn, không cắt chunk giữa chừng
         for i, score, text, meta in scored_indices[:top_k]:
             file_name = meta.get("file", "unknown")
             preview = f"### {file_name}\n{text}\n\n"
             if total_chars + len(text) > max_total_chars:
-                preview = f"### {file_name}\n{text[:max_total_chars-total_chars]}\n\n"
+                break  # Không thêm nữa nếu vượt quá giới hạn
             selected_chunks.append((score, preview))
             total_chars += len(text)
-            if total_chars >= max_total_chars:
-                break
 
         # Build context
-        print("\n--- Top Semantic Chunks (embedding from MongoDB or dynamic) ---")
+        print("\n--- Top Semantic Chunks (Excel only, embedding from MongoDB) ---")
         for rank, (score, preview) in enumerate(selected_chunks):
             print(f"[{rank+1}] Score: {score:.4f} | Preview: {preview[:100]}...")
 
